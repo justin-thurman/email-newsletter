@@ -1,5 +1,0 @@
-### Index
-GET http://localhost:8000
-
-### Index with name
-GET http://localhost:8000/Justin

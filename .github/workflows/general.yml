@@ -23,6 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
         with:
           components: rustfmt
       - name: Enforce formatting
@@ -34,6 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2

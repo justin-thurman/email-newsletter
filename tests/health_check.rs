@@ -18,6 +18,7 @@ async fn health_check_responds_200() {
     assert_eq!(Some(0), response.content_length());
 }
 
+// Spawns an app inside a future and returns the IP address that it's listening on.
 fn spawn_app() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind a random port");
     let port = listener.local_addr().unwrap().port();

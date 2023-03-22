@@ -1,3 +1,5 @@
+use email_newsletter::configuration::get_configuration;
+use sqlx::{Connection, PgConnection};
 use std::net::TcpListener;
 
 // Spawns an app inside a future and returns the IP address that it's listening on.
@@ -31,6 +33,12 @@ async fn health_check_responds_200() {
 async fn subscribe_with_valid_form_data_returns_200() {
     // arrange
     let address = spawn_app();
+    let configuration = get_configuration().expect("Failed to read configuration");
+    let connection_string = configuration.database.connection_string();
+    let _ = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
+
     let client = reqwest::Client::new();
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
 

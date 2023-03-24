@@ -1,6 +1,8 @@
-use email_newsletter::configuration::get_configuration;
-use sqlx::{Connection, PgConnection};
 use std::net::TcpListener;
+
+use sqlx::{Connection, PgConnection};
+
+use email_newsletter::configuration::get_configuration;
 
 // Spawns an app inside a future and returns the IP address that it's listening on.
 fn spawn_app() -> String {

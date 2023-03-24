@@ -31,7 +31,9 @@ async fn spawn_app() -> TestApp {
     }
 }
 
-pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
+// Configures a test database, running all migrations, and then returning the connection pool handle
+// needed to use the test database.
+async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let mut connection = PgConnection::connect(&config.connection_string_without_db())
         .await
         .expect("Failed to connect to postgres.");

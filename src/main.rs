@@ -10,7 +10,7 @@ mod telemetry;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    let subscriber = telemetry::get_tracing_subscriber("email-newsletter", "info");
+    let subscriber = telemetry::get_tracing_subscriber("email-newsletter", "info", std::io::stdout);
     init_subscriber(subscriber);
     let configuration = get_configuration().expect("Failed to read configuration.");
     let connection_pool = PgPool::connect(&configuration.database.connection_string())

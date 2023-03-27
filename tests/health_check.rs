@@ -1,9 +1,17 @@
 use std::net::TcpListener;
 
+use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 
 use email_newsletter::configuration::{get_configuration, DatabaseSettings};
+use email_newsletter::telemetry::{get_tracing_subscriber, init_subscriber};
+
+// ensure that the tracing stack is only initialized once
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let subscriber = get_tracing_subscriber("test", "debug");
+    init_subscriber(subscriber);
+});
 
 // A struct holding data needed to access a test version of our application
 pub struct TestApp {
@@ -13,6 +21,8 @@ pub struct TestApp {
 
 // Spawns an app inside a future and returns the IP address that it's listening on.
 async fn spawn_app() -> TestApp {
+    Lazy::force(&TRACING);
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind a random port");
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);

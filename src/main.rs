@@ -2,6 +2,7 @@ use std::net::TcpListener;
 
 use sqlx::PgPool;
 use tracing::subscriber::set_global_default;
+use tracing_log::LogTracer;
 
 use email_newsletter::configuration::get_configuration;
 use email_newsletter::startup::run;
@@ -10,6 +11,7 @@ mod telemetry;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
+    LogTracer::init().expect("Failed to set logger");
     let subscriber = telemetry::get_tracing_subscriber();
     set_global_default(subscriber).expect("Failed to set subscriber");
     let configuration = get_configuration().expect("Failed to read configuration.");

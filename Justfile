@@ -9,3 +9,9 @@ run:
 
 prepare-sqlx:
     cargo sqlx prepare -- --lib
+
+do-create:
+    doctl apps create --spec spec.yaml
+
+do-update APP_ID:
+    doctl apps update {{APP_ID}} --spec spec.yaml

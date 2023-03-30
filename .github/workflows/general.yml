@@ -23,7 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
-      - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           key: sqlx-${{ env.SQLX_VERSION }}
@@ -38,6 +37,9 @@ jobs:
         run: |
           sudo apt-get install libpq-dev -y
           SKIP_DOCKER=true ./bin/init_db.sh
+      - name: Check sqlx-data.json is up-to-date
+        run: |
+          cargo sqlx prepare --check -- --bin email-newsletter
       - name: Run tests
         run: cargo test
 
@@ -47,7 +49,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
-      - uses: rui314/setup-mold@v1
         with:
           components: rustfmt
       - name: Enforce formatting
@@ -67,7 +68,6 @@ jobs:
           - 5432:5432
     steps:
       - uses: actions/checkout@v3
-      - uses: rui314/setup-mold@v1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy

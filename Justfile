@@ -15,3 +15,6 @@ do-create:
 
 do-update APP_ID:
     doctl apps update {{APP_ID}} --spec spec.yaml
+
+do-list:
+    doctl apps list

@@ -1,3 +1,4 @@
+use crate::domain::NewSubscriber;
 use actix_web::{web, HttpResponse};
 use sqlx::types::chrono::Utc;
 use sqlx::types::uuid;
@@ -30,10 +31,10 @@ pub async fn subscribe(
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, connection_pool)
+    skip(new_subscriber, connection_pool)
 )]
 pub async fn insert_subscriber(
-    form: &FormData,
+    new_subscriber: &NewSubscriber,
     connection_pool: &PgPool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
@@ -42,8 +43,8 @@ pub async fn insert_subscriber(
         VALUES ($1, $2, $3, $4)
         "#,
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        new_subscriber.email,
+        new_subscriber.name,
         Utc::now()
     )
     .execute(connection_pool)

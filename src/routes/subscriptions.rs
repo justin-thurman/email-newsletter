@@ -1,4 +1,5 @@
-use crate::domain::{NewSubscriber, SubscriberName};
+use crate::domain::NewSubscriber;
+use crate::domain::SubscriberName;
 use actix_web::{web, HttpResponse};
 use sqlx::types::chrono::Utc;
 use sqlx::types::uuid;

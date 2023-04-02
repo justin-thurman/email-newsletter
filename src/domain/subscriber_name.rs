@@ -1,10 +1,5 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-pub struct NewSubscriber {
-    pub email: String,
-    pub name: SubscriberName,
-}
-
 #[derive(Debug)]
 pub struct SubscriberName(String);
 
@@ -25,7 +20,7 @@ impl SubscriberName {
     }
 }
 
-impl AsRef<str> for SubscriberName {
+impl AsRef<str> for crate::domain::SubscriberName {
     fn as_ref(&self) -> &str {
         &self.0
     }

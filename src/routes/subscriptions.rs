@@ -1,5 +1,4 @@
-use crate::domain::SubscriberName;
-use crate::domain::{NewSubscriber, SubscriberEmail};
+use crate::domain::NewSubscriber;
 use actix_web::{web, HttpResponse};
 use sqlx::types::chrono::Utc;
 use sqlx::types::uuid;
@@ -8,14 +7,8 @@ use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
-    email: String,
-    name: String,
-}
-
-fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
-    let name = SubscriberName::parse(form.name)?;
-    let email = SubscriberEmail::parse(form.email)?;
-    Ok(NewSubscriber { email, name })
+    pub email: String,
+    pub name: String,
 }
 
 #[tracing::instrument(
@@ -30,7 +23,7 @@ pub async fn subscribe(
     form: web::Form<FormData>,
     connection_pool: web::Data<PgPool>,
 ) -> HttpResponse {
-    let new_subscriber = match parse_subscriber(form.0) {
+    let new_subscriber = match form.0.try_into() {
         Ok(new_subscriber) => new_subscriber,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };

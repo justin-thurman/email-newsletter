@@ -5,6 +5,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 
 use email_newsletter::configuration::{get_configuration, DatabaseSettings};
+use email_newsletter::email_client::EmailClient;
 use email_newsletter::telemetry::{get_tracing_subscriber, init_subscriber};
 
 // ensure that the tracing stack is only initialized once
@@ -37,7 +38,13 @@ async fn spawn_app() -> TestApp {
 
     let connection_pool = configure_database(&configuration.database).await;
 
-    let server = email_newsletter::startup::run(listener, connection_pool.clone())
+    let sender_email = configuration
+        .email_client
+        .sender()
+        .expect("Invalid sender email address.");
+    let email_client = EmailClient::new(configuration.email_client.base_url, sender_email);
+
+    let server = email_newsletter::startup::run(listener, connection_pool.clone(), email_client)
         .expect("Failed to bind address");
     let _ = tokio::spawn(server);
     TestApp {

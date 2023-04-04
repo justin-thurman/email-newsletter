@@ -26,3 +26,40 @@ impl EmailClient {
         todo!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::SubscriberEmail;
+    use crate::email_client::EmailClient;
+    use fake::faker::internet::en::SafeEmail;
+    use fake::faker::lorem::en::{Paragraph, Sentence};
+    use fake::{Fake, Faker};
+    use wiremock::matchers::any;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn send_email_fires_a_request_to_base_url() {
+        // Arrange
+        let mock_server = MockServer::start().await; // spins up a server on random available port
+        let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
+        let email_client = EmailClient::new(mock_server.uri(), sender);
+
+        // by default, MockServer returns 404 to all requests; we mount a mock to tell it to respond with 200
+        Mock::given(any()) // match all requests
+            .respond_with(ResponseTemplate::new(200)) // response with 200, no body
+            .expect(1) // expect 1 incoming request; panics if not met by time mock server goes out of scope
+            .mount(&mock_server) // mount the mock to the server
+            .await;
+
+        let subscriber_email = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
+        let subject: String = Sentence(1..2).fake();
+        let content: String = Paragraph(1..10).fake();
+
+        // Act
+        let _ = email_client
+            .send_email(subscriber_email, &subject, &content, &content)
+            .await;
+
+        // Assert handled by Mock...expect(1)
+    }
+}

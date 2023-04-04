@@ -25,7 +25,7 @@ pub struct TestApp {
     pub connection_pool: PgPool,
 }
 
-// Spawns an app inside a future and returns the IP address that it's listening on.
+// Spawns an app inside a future and returns the configured TestApp.
 async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);
 

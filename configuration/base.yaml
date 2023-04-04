@@ -7,5 +7,5 @@ database:
   password: "password"
   database_name: "newsletter"
 email_client:
-  base_url: "localhost"
+  base_url: "http://localhost"
   sender_email: "test@gmail.com"

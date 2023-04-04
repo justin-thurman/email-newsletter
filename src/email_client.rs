@@ -1,14 +1,16 @@
 use crate::domain::SubscriberEmail;
-use reqwest::Client;
+use reqwest::{Client, Url};
 
 pub struct EmailClient {
     sender: SubscriberEmail,
     http_client: Client,
-    base_url: String,
+    base_url: Url,
 }
 
 impl EmailClient {
     pub fn new(base_url: String, sender: SubscriberEmail) -> Self {
+        let base_url = Url::parse(&base_url).expect("Failed to parse base_url");
+
         Self {
             http_client: Client::new(),
             base_url,
@@ -23,8 +25,32 @@ impl EmailClient {
         html_content: &str,
         text_content: &str,
     ) -> Result<(), String> {
-        todo!()
+        let url = self
+            .base_url
+            .join("/email")
+            .expect("Failed to join /email with base url");
+
+        let request_body = SendEmailRequest {
+            from: self.sender.as_ref().to_owned(),
+            to: recipient.as_ref().to_owned(),
+            subject: subject.to_owned(),
+            html_body: html_content.to_owned(),
+            text_body: text_content.to_owned(),
+        };
+
+        let builder = self.http_client.post(url).json(&request_body);
+
+        Ok(())
     }
+}
+
+#[derive(serde::Serialize)]
+struct SendEmailRequest {
+    from: String,
+    to: String,
+    subject: String,
+    html_body: String,
+    text_body: String,
 }
 
 #[cfg(test)]

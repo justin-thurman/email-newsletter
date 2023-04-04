@@ -1,6 +1,7 @@
-use crate::domain::SubscriberEmail;
 use reqwest::{Client, Url};
 use secrecy::{ExposeSecret, Secret};
+
+use crate::domain::SubscriberEmail;
 
 pub struct EmailClient {
     sender: SubscriberEmail,
@@ -15,6 +16,8 @@ impl EmailClient {
         sender: SubscriberEmail,
         authorization_token: Secret<String>,
     ) -> Self {
+        // more type-driven development: take a string, parse as a Url. Now we know, from this point forward,
+        // that base_url is valid.
         let base_url = Url::parse(&base_url).expect("Failed to parse base_url");
 
         Self {
@@ -31,7 +34,7 @@ impl EmailClient {
         subject: &str,
         html_content: &str,
         text_content: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), reqwest::Error> {
         let url = self
             .base_url
             .join("/email")
@@ -45,14 +48,16 @@ impl EmailClient {
             text_body: text_content.to_owned(),
         };
 
-        let builder = self
+        let _builder = self
             .http_client
-            .post(url)
+            .post(url) // doesn't actually send request; that's what `send` method is for
             .header(
                 "X-Postmark-Server-Token",
                 self.authorization_token.expose_secret(),
             )
-            .json(&request_body);
+            .json(&request_body) // also sets appropriate content-type headers
+            .send()
+            .await?;
 
         Ok(())
     }
@@ -69,14 +74,15 @@ struct SendEmailRequest {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::SubscriberEmail;
-    use crate::email_client::EmailClient;
     use fake::faker::internet::en::SafeEmail;
     use fake::faker::lorem::en::{Paragraph, Sentence};
     use fake::{Fake, Faker};
     use secrecy::Secret;
-    use wiremock::matchers::any;
+    use wiremock::matchers::{header, header_exists, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::domain::SubscriberEmail;
+    use crate::email_client::EmailClient;
 
     #[tokio::test]
     async fn send_email_fires_a_request_to_base_url() {
@@ -85,8 +91,11 @@ mod tests {
         let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
         let email_client = EmailClient::new(mock_server.uri(), sender, Secret::new(Faker.fake()));
 
-        // by default, MockServer returns 404 to all requests; we mount a mock to tell it to respond with 200
-        Mock::given(any()) // match all requests
+        // by default, MockServer returns 404 to all requests; we mount a mock to change this behavior
+        Mock::given(header_exists("X-Postmark-Server-Token")) // match requests with that header
+            .and(header("Content-Type", "application/json")) // and with this header, etc...
+            .and(path("/email"))
+            .and(method("POST"))
             .respond_with(ResponseTemplate::new(200)) // response with 200, no body
             .expect(1) // expect 1 incoming request; panics if not met by time mock server goes out of scope
             .mount(&mock_server) // mount the mock to the server

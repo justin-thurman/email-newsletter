@@ -20,8 +20,14 @@ impl EmailClient {
         // that base_url is valid.
         let base_url = Url::parse(&base_url).expect("Failed to parse base_url");
 
+        // building new http_client with a timeout; could also use per-request timeouts
+        let http_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap();
+
         Self {
-            http_client: Client::new(),
+            http_client,
             base_url,
             sender,
             authorization_token,
@@ -178,6 +184,33 @@ mod tests {
 
         Mock::given(any())
             .respond_with(ResponseTemplate::new(500))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        // act
+        let result = email_client
+            .send_email(subscriber_email, &subject, &content, &content)
+            .await;
+
+        // assert
+        assert_err!(result);
+    }
+
+    #[tokio::test]
+    async fn send_email_times_out_if_server_takes_too_long() {
+        // arrange
+        let mock_server = MockServer::start().await;
+        let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
+        let email_client = EmailClient::new(mock_server.uri(), sender, Secret::new(Faker.fake()));
+
+        let subscriber_email = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
+        let subject: String = Sentence(1..2).fake();
+        let content: String = Paragraph(1..10).fake();
+
+        let response = ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(11));
+        Mock::given(any())
+            .respond_with(response)
             .expect(1)
             .mount(&mock_server)
             .await;

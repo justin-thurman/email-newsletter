@@ -114,12 +114,28 @@ mod tests {
         }
     }
 
+    /// Generates a new email client for tests, using a random sender email and authorization token.
+    fn email_client(base_url: String) -> EmailClient {
+        EmailClient::new(base_url, email(), Secret::new(Faker.fake()))
+    }
+
+    fn email() -> SubscriberEmail {
+        SubscriberEmail::parse(SafeEmail().fake()).unwrap()
+    }
+
+    fn content() -> String {
+        Paragraph(1..10).fake()
+    }
+
+    fn subject() -> String {
+        Sentence(1..2).fake()
+    }
+
     #[tokio::test]
     async fn send_email_sends_the_expected_request() {
         // Arrange
         let mock_server = MockServer::start().await; // spins up a server on random available port
-        let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let email_client = EmailClient::new(mock_server.uri(), sender, Secret::new(Faker.fake()));
+        let email_client = email_client(mock_server.uri());
 
         // by default, MockServer returns 404 to all requests; we mount a mock to change this behavior
         Mock::given(header_exists("X-Postmark-Server-Token")) // match requests with that header
@@ -132,9 +148,9 @@ mod tests {
             .mount(&mock_server) // mount the mock to the server
             .await;
 
-        let subscriber_email = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let subject: String = Sentence(1..2).fake();
-        let content: String = Paragraph(1..10).fake();
+        let subscriber_email = email();
+        let subject = subject();
+        let content = content();
 
         // Act
         let _ = email_client
@@ -148,12 +164,11 @@ mod tests {
     async fn send_email_succeeds_if_server_returns_200() {
         // arrange
         let mock_server = MockServer::start().await;
-        let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let email_client = EmailClient::new(mock_server.uri(), sender, Secret::new(Faker.fake()));
+        let email_client = email_client(mock_server.uri());
 
         let subscriber_email = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let subject: String = Sentence(1..2).fake();
-        let content: String = Paragraph(1..10).fake();
+        let subject = subject();
+        let content = content();
 
         // matching any request here, as this test is about the behavior of our EmailClient, given a 200 response
         Mock::given(any())
@@ -175,12 +190,11 @@ mod tests {
     async fn send_email_fails_if_server_returns_500() {
         // arrange
         let mock_server = MockServer::start().await;
-        let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let email_client = EmailClient::new(mock_server.uri(), sender, Secret::new(Faker.fake()));
+        let email_client = email_client(mock_server.uri());
 
         let subscriber_email = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let subject: String = Sentence(1..2).fake();
-        let content: String = Paragraph(1..10).fake();
+        let subject = subject();
+        let content = content();
 
         Mock::given(any())
             .respond_with(ResponseTemplate::new(500))
@@ -201,12 +215,11 @@ mod tests {
     async fn send_email_times_out_if_server_takes_too_long() {
         // arrange
         let mock_server = MockServer::start().await;
-        let sender = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let email_client = EmailClient::new(mock_server.uri(), sender, Secret::new(Faker.fake()));
+        let email_client = email_client(mock_server.uri());
 
         let subscriber_email = SubscriberEmail::parse(SafeEmail().fake()).unwrap();
-        let subject: String = Sentence(1..2).fake();
-        let content: String = Paragraph(1..10).fake();
+        let subject = subject();
+        let content = content();
 
         let response = ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(11));
         Mock::given(any())

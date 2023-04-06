@@ -15,16 +15,14 @@ impl EmailClient {
         base_url: String,
         sender: SubscriberEmail,
         authorization_token: Secret<String>,
+        timeout: std::time::Duration,
     ) -> Self {
         // more type-driven development: take a string, parse as a Url. Now we know, from this point forward,
         // that base_url is valid.
         let base_url = Url::parse(&base_url).expect("Failed to parse base_url");
 
         // building new http_client with a timeout; could also use per-request timeouts
-        let http_client = Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .unwrap();
+        let http_client = Client::builder().timeout(timeout).build().unwrap();
 
         Self {
             http_client,
@@ -116,7 +114,12 @@ mod tests {
 
     /// Generates a new email client for tests, using a random sender email and authorization token.
     fn email_client(base_url: String) -> EmailClient {
-        EmailClient::new(base_url, email(), Secret::new(Faker.fake()))
+        EmailClient::new(
+            base_url,
+            email(),
+            Secret::new(Faker.fake()),
+            std::time::Duration::from_millis(100),
+        )
     }
 
     fn email() -> SubscriberEmail {

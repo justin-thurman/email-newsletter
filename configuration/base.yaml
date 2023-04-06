@@ -9,3 +9,4 @@ database:
 email_client:
   base_url: "http://localhost"
   sender_email: "test@gmail.com"
+  timeout_milliseconds: 10000

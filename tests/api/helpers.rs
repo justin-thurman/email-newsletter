@@ -23,6 +23,19 @@ pub struct TestApp {
     pub connection_pool: PgPool,
 }
 
+impl TestApp {
+    /// Posts the provided body to the subscriptions endpoint
+    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+}
+
 // Spawns an app inside a future and returns the configured TestApp.
 pub async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);

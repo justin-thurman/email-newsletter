@@ -58,7 +58,7 @@ pub fn get_connection_pool(configuration: &DatabaseSettings) -> PgPool {
         .connect_lazy_with(configuration.with_db())
 }
 
-pub fn run(
+fn run(
     listener: TcpListener,
     connection_pool: PgPool,
     email_client: EmailClient,

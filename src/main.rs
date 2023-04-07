@@ -1,5 +1,5 @@
 use email_newsletter::configuration::get_configuration;
-use email_newsletter::startup::build;
+use email_newsletter::startup::Application;
 use email_newsletter::telemetry;
 
 #[tokio::main]
@@ -9,7 +9,9 @@ async fn main() -> Result<(), std::io::Error> {
 
     let configuration = get_configuration().expect("Failed to read configuration.");
 
-    let server = build(configuration).await?;
-    server.await?;
+    let application = Application::build(configuration)
+        .await
+        .expect("Failed to build application");
+    application.run_until_stopped().await?;
     Ok(())
 }

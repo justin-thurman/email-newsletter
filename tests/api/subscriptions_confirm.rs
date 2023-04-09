@@ -31,28 +31,11 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
 
     app.post_subscriptions(body.to_string()).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
-    let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
-
-    // extract the link from one of the request fields
-    let get_link = |s: &str| {
-        let links: Vec<_> = linkify::LinkFinder::new()
-            .links(s)
-            .filter(|l| *l.kind() == linkify::LinkKind::Url)
-            .collect();
-        assert_eq!(links.len(), 1);
-        links[0].as_str().to_string()
-    };
-
-    let confirmation_link = &get_link(body["HtmlBody"].as_str().unwrap());
-    let mut confirmation_link = reqwest::Url::parse(confirmation_link).unwrap();
-    // make sure the confirmation link points to our address, so we don't accidentally call live servers
-    assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
-    // manually update the confirmation link to use the correct port; only necessary for testing purposes
-    confirmation_link.set_port(Some(app.port)).unwrap();
+    let confirmation_links = app.get_confirmation_links(email_request).await;
 
     // act
     // make get request to the confirm endpoint
-    let response = reqwest::get(confirmation_link).await.unwrap();
+    let response = reqwest::get(confirmation_links.html).await.unwrap();
 
     // assert
     assert_eq!(response.status().as_u16(), 200);

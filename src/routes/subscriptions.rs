@@ -1,5 +1,6 @@
 use crate::domain::NewSubscriber;
 use crate::email_client::EmailClient;
+use crate::startup::ApplicationBaseUrl;
 use actix_web::{web, HttpResponse};
 use sqlx::types::chrono::Utc;
 use sqlx::types::uuid;
@@ -14,7 +15,7 @@ pub struct FormData {
 
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, connection_pool, email_client),
+    skip(form, connection_pool, email_client, application_base_url),
     fields(
         subscriber_email = %form.email,
         subscriber_name = %form.name
@@ -24,6 +25,7 @@ pub async fn subscribe(
     form: web::Form<FormData>,
     connection_pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
+    application_base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
     let new_subscriber = match form.0.try_into() {
         Ok(new_subscriber) => new_subscriber,
@@ -37,7 +39,7 @@ pub async fn subscribe(
         return HttpResponse::InternalServerError().finish();
     }
 
-    if send_confirmation_email(email_client.as_ref(), new_subscriber)
+    if send_confirmation_email(&email_client, new_subscriber, &application_base_url.0)
         .await
         .is_err()
     {
@@ -81,8 +83,12 @@ pub async fn insert_subscriber(
 pub async fn send_confirmation_email(
     email_client: &EmailClient,
     new_subscriber: NewSubscriber,
+    base_url: &str,
 ) -> Result<(), reqwest::Error> {
-    let confirmation_link = "https://example.com/subscriptions/confirm";
+    let confirmation_link = format!(
+        "{}/subscriptions/confirm?subscription_token=token",
+        base_url
+    );
     email_client
         .send_email(
             new_subscriber.email,

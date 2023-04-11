@@ -1,26 +1,17 @@
-use std::net::TcpListener;
-
-use sqlx::postgres::PgPoolOptions;
-
-use crate::telemetry::init_subscriber;
 use email_newsletter::configuration::get_configuration;
-use email_newsletter::startup::run;
-
-mod telemetry;
+use email_newsletter::startup::Application;
+use email_newsletter::telemetry;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     let subscriber = telemetry::get_tracing_subscriber("email-newsletter", "info", std::io::stdout);
-    init_subscriber(subscriber);
+    telemetry::init_subscriber(subscriber);
+
     let configuration = get_configuration().expect("Failed to read configuration.");
-    let connection_pool = PgPoolOptions::new()
-        .acquire_timeout(std::time::Duration::from_secs(5))
-        .connect_lazy_with(configuration.database.with_db());
-    let address = format!(
-        "{}:{}",
-        configuration.application.host, configuration.application.port
-    );
-    println!("Running application on {}", address);
-    let listener = TcpListener::bind(address)?;
-    run(listener, connection_pool)?.await
+
+    let application = Application::build(configuration)
+        .await
+        .expect("Failed to build application");
+    application.run_until_stopped().await?;
+    Ok(())
 }

@@ -27,7 +27,26 @@ pub async fn confirm(
         parameters.subscription_token
     )
      */
-    Ok(())
+    let subscriber_id = match get_subscriber_id_from_token(
+        &parameters.subscription_token,
+        &connection_pool,
+    )
+    .await
+    {
+        Ok(option) => match option {
+            Some(id) => id,
+            // token does not exist
+            None => return HttpResponse::Unauthorized().finish(),
+        },
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+    if confirm_subscriber(subscriber_id, &connection_pool)
+        .await
+        .is_err()
+    {
+        return HttpResponse::InternalServerError().finish();
+    }
+    HttpResponse::Ok().finish()
 }
 
 #[tracing::instrument(

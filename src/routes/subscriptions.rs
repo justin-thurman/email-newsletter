@@ -1,13 +1,16 @@
-use crate::domain::NewSubscriber;
-use crate::email_client::EmailClient;
-use crate::startup::ApplicationBaseUrl;
-use actix_web::{web, HttpResponse};
+use std::fmt::Formatter;
+
+use actix_web::{web, HttpResponse, ResponseError};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use sqlx::types::chrono::Utc;
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
+
+use crate::domain::NewSubscriber;
+use crate::email_client::EmailClient;
+use crate::startup::ApplicationBaseUrl;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -154,6 +157,25 @@ pub async fn store_token(
     })?;
     Ok(())
 }
+
+#[derive(Debug)]
+pub struct StoreTokenError(sqlx::Error);
+
+impl std::fmt::Display for StoreTokenError {
+    // Must implement Display and Debug in order to implement ResponseError (below)
+    // which in turn is needed to implement From<T> for actix_web::Error
+    // In other words, if we implement ResponseError on our error types, we can let actix build a
+    // response out of our custom error types in order to provide information to the end user when we
+    // encounter particular errors
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "A database error was encountered while trying to store a subscription token."
+        )
+    }
+}
+
+impl ResponseError for StoreTokenError {}
 
 /// Generate a random 25-character subscription token
 fn generate_subscription_token() -> String {

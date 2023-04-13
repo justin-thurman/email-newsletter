@@ -40,21 +40,18 @@ pub async fn subscribe(
     let mut transaction = connection_pool
         .begin()
         .await
-        .map_err(|e| SubscribeError::PoolError(e))?;
+        .map_err(SubscribeError::PoolError)?;
 
     let subscriber_id = insert_subscriber(&new_subscriber, &mut transaction)
         .await
-        .map_err(|e| SubscribeError::InsertSubscriberError(e))?;
+        .map_err(SubscribeError::InsertSubscriberError)?;
     let token = generate_subscription_token();
-    // store_token returns a StoreTokenError, but since we've implemented ResponseError on StoreTokenError,
-    // we get `From<StoreTokenError> for actix_web::Error` for free, so the `?` operator can implicitly
-    // convert our returned StoreTokenError into the actix_web::Error that this handler returns
     store_token(&mut transaction, subscriber_id, &token).await?;
 
     transaction
         .commit()
         .await
-        .map_err(|e| SubscribeError::TransactionCommitError(e))?;
+        .map_err(SubscribeError::TransactionCommitError)?;
 
     send_confirmation_email(
         &email_client,

@@ -1,10 +1,10 @@
 use std::fmt::Formatter;
 
 use actix_web::http::StatusCode;
-use actix_web::{web, HttpResponse, ResponseError};
+use actix_web::{HttpResponse, ResponseError, web};
 use anyhow::Context;
 use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use sqlx::types::chrono::Utc;
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::domain::NewSubscriber;
 use crate::email_client::EmailClient;
+use crate::error_handling;
 use crate::startup::ApplicationBaseUrl;
 
 #[derive(serde::Deserialize)]
@@ -80,7 +81,7 @@ pub enum SubscribeError {
 
 impl std::fmt::Debug for SubscribeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        error_chain_fmt(self, f)
+        error_handling::error_chain_fmt(self, f)
     }
 }
 
@@ -188,7 +189,7 @@ impl std::fmt::Display for StoreTokenError {
 
 impl std::fmt::Debug for StoreTokenError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        error_chain_fmt(self, f)
+        error_handling::error_chain_fmt(self, f)
     }
 }
 
@@ -197,20 +198,6 @@ impl std::error::Error for StoreTokenError {
         // compiler can implicitly cast `&sqlx::Error` into `&dyn Error`
         Some(&self.0)
     }
-}
-
-/// Iterates over a chain of errors via the `source` method and prints the error with its cause
-fn error_chain_fmt(
-    error: &impl std::error::Error,
-    formatter: &mut std::fmt::Formatter<'_>,
-) -> std::fmt::Result {
-    writeln!(formatter, "{}\n", error)?;
-    let mut current = error.source();
-    while let Some(cause) = current {
-        writeln!(formatter, "Caused by:\n\t{}", cause)?;
-        current = cause.source();
-    }
-    Ok(())
 }
 
 /// Generate a random 25-character subscription token

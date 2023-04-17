@@ -45,6 +45,16 @@ impl TestApp {
             .expect("Failed to execute request")
     }
 
+    /// Posts the provided body to the newsletters endpoint
+    pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(&format!("{}/newsletters", self.address))
+            .json(&body)
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+
     /// Extracts confirmation links from mocked email API requests
     pub async fn get_confirmation_links(
         &self,

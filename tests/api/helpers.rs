@@ -1,4 +1,5 @@
 use once_cell::sync::Lazy;
+use sha3::Digest;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::MockServer;
@@ -18,6 +19,37 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     }
 });
 
+/// User info to use in tests
+pub struct TestUser {
+    pub user_id: Uuid,
+    pub username: String,
+    pub password: String,
+}
+
+impl TestUser {
+    pub fn generate() -> Self {
+        Self {
+            user_id: Uuid::new_v4(),
+            username: Uuid::new_v4().to_string(),
+            password: Uuid::new_v4().to_string(),
+        }
+    }
+
+    async fn store(&self, pool: &PgPool) {
+        let password_hash = sha3::Sha3_256::digest(self.password.as_bytes());
+        let password_hash = format!("{:x}", password_hash);
+        sqlx::query!(
+            "INSERT INTO users (user_id, username, password_hash) VALUES ($1, $2, $3)",
+            self.user_id,
+            self.username,
+            password_hash
+        )
+        .execute(pool)
+        .await
+        .expect("Failed to store test user");
+    }
+}
+
 /// Confirmation links embedded in request bodies to the email API.
 pub struct ConfirmationLinks {
     pub html: reqwest::Url,
@@ -31,6 +63,7 @@ pub struct TestApp {
     // email_server stands in for Postmark's API
     pub email_server: MockServer,
     pub port: u16,
+    test_user: TestUser,
 }
 
 impl TestApp {
@@ -47,11 +80,10 @@ impl TestApp {
 
     /// Posts the provided body to the newsletters endpoint
     pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
-        let (username, password) = self.test_user().await;
         reqwest::Client::new()
             .post(&format!("{}/newsletters", self.address))
             .json(&body)
-            .basic_auth(username, Some(password))
+            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .send()
             .await
             .expect("Failed to execute request")
@@ -84,15 +116,6 @@ impl TestApp {
         let plain_text = get_link(body["TextBody"].as_str().unwrap());
 
         ConfirmationLinks { html, plain_text }
-    }
-
-    /// Gets the username and password of the test user
-    pub async fn test_user(&self) -> (String, String) {
-        let record = sqlx::query!("SELECT username, password FROM users LIMIT 1")
-            .fetch_one(&self.connection_pool)
-            .await
-            .expect("Failed to fetch test user");
-        (record.username, record.password)
     }
 }
 
@@ -127,8 +150,9 @@ pub async fn spawn_app() -> TestApp {
         connection_pool: get_connection_pool(&configuration.database),
         email_server,
         port,
+        test_user: TestUser::generate(),
     };
-    add_test_user(&test_app.connection_pool).await;
+    test_app.test_user.store(&test_app.connection_pool).await;
     test_app
 }
 
@@ -154,16 +178,4 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .expect("Failed to migrate the database");
 
     connection_pool
-}
-
-async fn add_test_user(pool: &PgPool) {
-    sqlx::query!(
-        "INSERT INTO users (user_id, username, password) VALUES ($1, $2, $3)",
-        Uuid::new_v4(),
-        Uuid::new_v4().to_string(),
-        Uuid::new_v4().to_string(),
-    )
-    .execute(pool)
-    .await
-    .expect("Failed to create test user.");
 }

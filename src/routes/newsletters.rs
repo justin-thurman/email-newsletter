@@ -175,43 +175,55 @@ fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Erro
 }
 
 /// Validates user credentials and returns user's ID
+#[tracing::instrument(name = "Validate credentials", skip(credentials, pool))]
 async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<uuid::Uuid, PublishError> {
+    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, &pool)
+        .await
+        .map_err(PublishError::UnexpectedError)?
+        .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?;
+
+    // PasswordHash implements UHC string format, which encodes the hashing algorithm, the algo version,
+    // the algo load parameters, the hash, and the salt; this makes it easy to refactor our code to update
+    // any of these values in the future. We can migrate old user hashes because the old configuration is
+    // encoded in the hash itself.
+    let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
+        .context("Failed to parse hash in PHC string format.")
+        .map_err(PublishError::UnexpectedError)?;
+
+    tracing::info_span!("Verify password hash")
+        .in_scope(|| {
+            Argon2::default().verify_password(
+                credentials.password.expose_secret().as_bytes(),
+                &expected_password_hash,
+            )
+        })
+        .context("Invalid password.")
+        .map_err(PublishError::AuthError)?;
+
+    Ok(user_id)
+}
+
+/// Gets stored user credentials based on a username. Returns a tuple of user id and the user's
+/// password hash, wrapped in a secret.
+#[tracing::instrument(name = "Get stored credentials", skip(username, pool))]
+async fn get_stored_credentials(
+    username: &str,
+    pool: &PgPool,
+) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
     let row: Option<_> = sqlx::query!(
         r#"
         SELECT user_id, password_hash
         FROM users
         WHERE username = $1
         "#,
-        credentials.username,
+        username,
     )
     .fetch_optional(pool)
     .await
-    .context("Failed to perform a query to retrieve stored credentials")
-    .map_err(PublishError::UnexpectedError)?;
-
-    let (expected_password_hash, user_id) = match row {
-        Some(row) => (row.password_hash, row.user_id),
-        None => return Err(PublishError::AuthError(anyhow::anyhow!("Unknown username"))),
-    };
-
-    // PasswordHash implements UHC string format, which encodes the hashing algorithm, the algo version,
-    // the algo load parameters, the hash, and the salt; this makes it easy to refactor our code to update
-    // any of these values in the future. We can migrate old user hashes because the old configuration is
-    // encoded in the hash itself.
-    let expected_password_hash = PasswordHash::new(&expected_password_hash)
-        .context("Failed to parse hash in PHC string format.")
-        .map_err(PublishError::UnexpectedError)?;
-
-    Argon2::default()
-        .verify_password(
-            credentials.password.expose_secret().as_bytes(),
-            &expected_password_hash,
-        )
-        .context("Invalid password.")
-        .map_err(PublishError::AuthError)?;
-
-    Ok(user_id)
+    .context("Failed to perform a query to retrieve stored credentials")?
+    .map(|row| (row.user_id, Secret::new(row.password_hash)));
+    Ok(row)
 }

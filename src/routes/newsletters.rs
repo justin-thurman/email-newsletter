@@ -185,6 +185,26 @@ async fn validate_credentials(
         .map_err(PublishError::UnexpectedError)?
         .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?;
 
+    tokio::task::spawn_blocking(move || {
+        // `verify_password` can take 5-10 ms to complete; in order to avoid blocking the async scheduler,
+        // we're moving the work to a blocking thread.
+        verify_password_hash(expected_password_hash, credentials.password)
+    })
+    .await
+    .context("Failed to spawn blocking task.")
+    .map_err(PublishError::UnexpectedError)??;
+
+    Ok(user_id)
+}
+
+#[tracing::instrument(
+    name = "Verify password hash",
+    skip(expected_password_hash, password_candidate)
+)]
+fn verify_password_hash(
+    expected_password_hash: Secret<String>,
+    password_candidate: Secret<String>,
+) -> Result<(), PublishError> {
     // PasswordHash implements UHC string format, which encodes the hashing algorithm, the algo version,
     // the algo load parameters, the hash, and the salt; this makes it easy to refactor our code to update
     // any of these values in the future. We can migrate old user hashes because the old configuration is
@@ -193,17 +213,13 @@ async fn validate_credentials(
         .context("Failed to parse hash in PHC string format.")
         .map_err(PublishError::UnexpectedError)?;
 
-    tracing::info_span!("Verify password hash")
-        .in_scope(|| {
-            Argon2::default().verify_password(
-                credentials.password.expose_secret().as_bytes(),
-                &expected_password_hash,
-            )
-        })
-        .context("Invalid password.")
-        .map_err(PublishError::AuthError)?;
-
-    Ok(user_id)
+    Argon2::default()
+        .verify_password(
+            password_candidate.expose_secret().as_bytes(),
+            &expected_password_hash,
+        )
+        .context("Invalid password")
+        .map_err(PublishError::AuthError)
 }
 
 /// Gets stored user credentials based on a username. Returns a tuple of user id and the user's

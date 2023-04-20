@@ -181,10 +181,20 @@ async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<uuid::Uuid, PublishError> {
-    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, &pool)
-        .await
-        .map_err(PublishError::UnexpectedError)?
-        .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?;
+    // setting default credentials so that we have a password to check; this eliminates a possible timing attack
+    // that we would be vulnerable to if we exited early upon finding an invalid username
+    let mut user_id = None;
+    let mut expected_password_hash = Secret::new(
+        "$argon2id$v=19$m=15000,t=2,p=1$gZiV/M1gPc22ElAH/Jh1Hw$CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno".to_string()
+    );
+    if let Some((stored_user_id, stored_password_hash)) =
+        get_stored_credentials(&credentials.username, &pool)
+            .await
+            .map_err(PublishError::UnexpectedError)?
+    {
+        user_id = Some(stored_user_id);
+        expected_password_hash = stored_password_hash;
+    }
 
     // `verify_password` can take 5-10 ms to complete; in order to avoid blocking the async scheduler,
     // we're moving the work to a blocking thread. Remember the rule of thumb: async functions should
@@ -196,7 +206,8 @@ async fn validate_credentials(
     .context("Failed to spawn blocking task.")
     .map_err(PublishError::UnexpectedError)??;
 
-    Ok(user_id)
+    // if user_id is still None at this point, then we never found a valid user from `get_stored_credentials`
+    user_id.ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))
 }
 
 #[tracing::instrument(

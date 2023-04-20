@@ -9,6 +9,7 @@ use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use base64::Engine;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
+use tokio::task::JoinHandle;
 
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
@@ -185,9 +186,10 @@ async fn validate_credentials(
         .map_err(PublishError::UnexpectedError)?
         .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username")))?;
 
-    tokio::task::spawn_blocking(move || {
-        // `verify_password` can take 5-10 ms to complete; in order to avoid blocking the async scheduler,
-        // we're moving the work to a blocking thread.
+    // `verify_password` can take 5-10 ms to complete; in order to avoid blocking the async scheduler,
+    // we're moving the work to a blocking thread. Remember the rule of thumb: async functions should
+    // never go too long without reaching an await.
+    spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
     .await
@@ -242,4 +244,16 @@ async fn get_stored_credentials(
     .context("Failed to perform a query to retrieve stored credentials")?
     .map(|row| (row.user_id, Secret::new(row.password_hash)));
     Ok(row)
+}
+
+/// A helper function to spawn a blocking thread with tokio and pass in the current span so that the
+/// blocking thread has access to the current span as its parent.
+pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>
+where
+    // Trait bounds and signature copied from `spawn_blocking`
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    let current_span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || current_span.in_scope(f))
 }

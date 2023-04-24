@@ -75,6 +75,36 @@ pub struct TestApp {
 }
 
 impl TestApp {
+    /// Returns the rendered HTML string from a GET request to the /login endpoint
+    pub async fn get_login_html(&self) -> String {
+        reqwest::Client::new()
+            .get(&format!("{}/login", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+            .text()
+            .await
+            .unwrap()
+    }
+
+    /// Posts a request to the login endpoint
+    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+            .post(&format!("{}/login", &self.address))
+            // the `form` method makes sure the body is URL-encoded and the
+            // `Content-Type` header is set appropriately
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+
     /// Posts the provided body to the subscriptions endpoint
     pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
         reqwest::Client::new()
@@ -186,4 +216,10 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .expect("Failed to migrate the database");
 
     connection_pool
+}
+
+/// Asserts that a given redirect is to the provided location
+pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
+    assert_eq!(response.status().as_u16(), 303);
+    assert_eq!(response.headers().get("Location").unwrap(), location);
 }

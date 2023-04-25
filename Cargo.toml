@@ -32,6 +32,7 @@ thiserror = "1"
 anyhow = "1"
 base64 = "0.21"
 argon2 = { version = "0.4", features = ["std"]}
+actix-web-flash-messages = { version = "0.4", features = ["cookies"]}
 
 [dependencies.sqlx]
 version = "0.6.3"

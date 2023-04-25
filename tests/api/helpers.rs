@@ -1,3 +1,4 @@
+use actix_web::web::redirect;
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
@@ -72,12 +73,13 @@ pub struct TestApp {
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
+    pub api_client: reqwest::Client,
 }
 
 impl TestApp {
     /// Returns the rendered HTML string from a GET request to the /login endpoint
     pub async fn get_login_html(&self) -> String {
-        reqwest::Client::new()
+        self.api_client
             .get(&format!("{}/login", &self.address))
             .send()
             .await
@@ -92,10 +94,7 @@ impl TestApp {
     where
         Body: serde::Serialize,
     {
-        reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .unwrap()
+        self.api_client
             .post(&format!("{}/login", &self.address))
             // the `form` method makes sure the body is URL-encoded and the
             // `Content-Type` header is set appropriately
@@ -107,7 +106,7 @@ impl TestApp {
 
     /// Posts the provided body to the subscriptions endpoint
     pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
-        reqwest::Client::new()
+        self.api_client
             .post(&format!("{}/subscriptions", &self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body)
@@ -118,7 +117,7 @@ impl TestApp {
 
     /// Posts the provided body to the newsletters endpoint
     pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
-        reqwest::Client::new()
+        self.api_client
             .post(&format!("{}/newsletters", self.address))
             .json(&body)
             .basic_auth(&self.test_user.username, Some(&self.test_user.password))
@@ -183,12 +182,21 @@ pub async fn spawn_app() -> TestApp {
     let port = application.port();
     let address = format!("http://127.0.0.1:{}", port);
     let _ = tokio::spawn(application.run_until_stopped());
+
+    // create a request client that stores cookies and store it in test app
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .cookie_store(true)
+        .build()
+        .unwrap();
+
     let test_app = TestApp {
         address,
         connection_pool: get_connection_pool(&configuration.database),
         email_server,
         port,
         test_user: TestUser::generate(),
+        api_client: client,
     };
     test_app.test_user.store(&test_app.connection_pool).await;
     test_app

@@ -1,4 +1,3 @@
-
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
@@ -102,6 +101,18 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request")
+    }
+
+    /// Gets the admin dashboard endpoint
+    pub async fn get_admin_dashboard(&self) -> String {
+        self.api_client
+            .get(&format!("{}/admin/dashboard", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+            .text()
+            .await
+            .unwrap()
     }
 
     /// Posts the provided body to the subscriptions endpoint

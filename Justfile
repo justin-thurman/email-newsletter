@@ -1,6 +1,10 @@
 default:
     @just --list
 
+up:
+    ./bin/init_db.sh
+    ./bin/init_redis.sh
+
 build:
     docker build --tag email-newsletter --file Dockerfile .
 

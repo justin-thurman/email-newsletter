@@ -1,11 +1,14 @@
+use actix_web::web::to;
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
+use config::ConfigError::Type;
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::MockServer;
 
 use email_newsletter::configuration::{get_configuration, DatabaseSettings};
+use email_newsletter::routes::login;
 use email_newsletter::startup::{get_connection_pool, Application};
 use email_newsletter::telemetry::{get_tracing_subscriber, init_subscriber};
 
@@ -76,6 +79,28 @@ pub struct TestApp {
 }
 
 impl TestApp {
+    /// Returns the change password get response
+    pub async fn get_change_password(&self) -> reqwest::Response {
+        self.api_client
+            .get(&format!("{}/admin/password", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+
+    /// Posts to the change password endpoint
+    pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.api_client
+            .post(&format!("{}/admin/password", self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+
     /// Returns the rendered HTML string from a GET request to the /login endpoint
     pub async fn get_login_html(&self) -> String {
         self.api_client

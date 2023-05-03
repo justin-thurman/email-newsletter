@@ -88,6 +88,11 @@ impl TestApp {
             .expect("Failed to execute request")
     }
 
+    /// Returns the rendered HTML string from a GET request to /admin/password
+    pub async fn get_change_password_html(&self) -> String {
+        self.get_change_password().await.text().await.unwrap()
+    }
+
     /// Posts to the change password endpoint
     pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
     where

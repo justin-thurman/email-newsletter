@@ -2,11 +2,11 @@ use std::fmt::Write;
 
 use actix_web::http::header::ContentType;
 use actix_web::HttpResponse;
-use actix_web_flash_messages::{IncomingFlashMessages, Level};
+use actix_web_flash_messages::IncomingFlashMessages;
 
 pub async fn login_form(flash_messages: IncomingFlashMessages) -> HttpResponse {
     let mut error_html = String::new();
-    for message in flash_messages.iter().filter(|m| m.level() == Level::Error) {
+    for message in flash_messages.iter() {
         writeln!(error_html, "<p><i>{}</i></p>", message.content()).unwrap();
     }
     HttpResponse::Ok()

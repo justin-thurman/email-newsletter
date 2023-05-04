@@ -76,6 +76,15 @@ pub struct TestApp {
 }
 
 impl TestApp {
+    /// Gets the logout endpoint
+    pub async fn post_logout(&self) -> reqwest::Response {
+        self.api_client
+            .post(&format!("{}/admin/logout", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
     /// Returns the change password get response
     pub async fn get_change_password(&self) -> reqwest::Response {
         self.api_client

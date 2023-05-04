@@ -127,6 +127,7 @@ async fn current_password_is_too_short() {
 
 #[tokio::test]
 async fn current_password_is_too_long() {
+    // arrange
     let app = spawn_app().await;
     let long_password = "1".repeat(129);
 
@@ -152,4 +153,51 @@ async fn current_password_is_too_long() {
     // act 3: follow the redirect
     let html_page = app.get_change_password_html().await;
     assert!(html_page.contains("<p><i>Password must be no more than 128 characters.</i></p>"));
+}
+
+#[tokio::test]
+async fn full_change_password_flow() {
+    // arrange
+    let app = spawn_app().await;
+    let new_password = Uuid::new_v4().to_string();
+
+    // act 1: login
+    let response = app
+        .post_login(&serde_json::json!({
+            "username": &app.test_user.username,
+            "password": &app.test_user.password,
+        }))
+        .await;
+    assert_is_redirect_to(&response, "/admin/dashboard");
+
+    // act 2: change password
+    let response = app
+        .post_change_password(&serde_json::json!({
+            "current_password": &app.test_user.password,
+            "new_password": &new_password,
+            "new_password_check": &new_password,
+        }))
+        .await;
+    assert_is_redirect_to(&response, "/admin/password");
+
+    // act 3: follow the redirect
+    let html_page = app.get_change_password_html().await;
+    assert!(html_page.contains("<p><i>Your password has been changed.</i></p>"));
+
+    // act 4: logout
+    let response = app.post_logout().await;
+    assert_is_redirect_to(&response, "/login");
+
+    // act 5: follow the redirect
+    let html_page = app.get_login_html().await;
+    assert!(html_page.contains("<p><i>You have successfully logged out.</i></p>"));
+
+    // act 6: log in using new password
+    let response = app
+        .post_login(&serde_json::json!({
+            "username": &app.test_user.username,
+            "password": &new_password,
+        }))
+        .await;
+    assert_is_redirect_to(&response, "/admin/dashboard");
 }

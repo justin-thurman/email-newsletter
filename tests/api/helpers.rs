@@ -230,7 +230,7 @@ pub async fn spawn_app() -> TestApp {
         .expect("Failed to build application");
     let port = application.port();
     let address = format!("http://127.0.0.1:{}", port);
-    let _ = tokio::spawn(application.run_until_stopped());
+    tokio::spawn(application.run_until_stopped());
 
     // create a request client that stores cookies and store it in test app
     let client = reqwest::Client::builder()

@@ -1,11 +1,14 @@
+use actix_web::error::InternalError;
 use anyhow::Context;
-use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use argon2::password_hash::SaltString;
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 
 use crate::routes;
 use crate::routes::spawn_blocking_with_tracing;
+use crate::routing_helpers::{e500, see_other};
+use crate::session_state::TypedSession;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AuthError {
@@ -107,9 +110,9 @@ pub async fn change_password(
     password: Secret<String>,
     pool: &PgPool,
 ) -> Result<(), anyhow::Error> {
-    let password_hash = spawn_blocking_with_tracing(
-        move || compute_password_hash(password)
-    ).await?.context("Failed to hash password")?;
+    let password_hash = spawn_blocking_with_tracing(move || compute_password_hash(password))
+        .await?
+        .context("Failed to hash password")?;
     sqlx::query!(
         r#"
         UPDATE users
@@ -118,7 +121,10 @@ pub async fn change_password(
         "#,
         password_hash.expose_secret(),
         user_id,
-    ).execute(pool).await.context("Failed to change user's password in the database.")?;
+    )
+    .execute(pool)
+    .await
+    .context("Failed to change user's password in the database.")?;
     Ok(())
 }
 
@@ -130,7 +136,18 @@ fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, any
         Version::V0x13,
         Params::new(15000, 2, 1, None).unwrap(),
     )
-        .hash_password(password.expose_secret().as_bytes(), &salt)?
-        .to_string();
+    .hash_password(password.expose_secret().as_bytes(), &salt)?
+    .to_string();
     Ok(Secret::new(password_hash))
+}
+
+pub async fn reject_anonymous_users(session: TypedSession) -> Result<uuid::Uuid, actix_web::Error> {
+    match session.get_user_id().map_err(e500)? {
+        Some(user_id) => Ok(user_id),
+        None => {
+            let response = see_other("/login");
+            let e = anyhow::anyhow!("The user has not logged in");
+            Err(InternalError::from_response(e, response).into())
+        }
+    }
 }

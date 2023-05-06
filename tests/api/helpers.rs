@@ -178,7 +178,6 @@ impl TestApp {
         self.api_client
             .post(&format!("{}/admin/newsletters", self.address))
             .json(&body)
-            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .send()
             .await
             .expect("Failed to execute request")

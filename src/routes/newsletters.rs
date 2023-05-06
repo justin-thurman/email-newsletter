@@ -1,20 +1,20 @@
 use std::fmt::{Debug, Formatter};
 
-use crate::authentication;
-use crate::authentication::{AuthError, Credentials};
 use actix_web::body::BoxBody;
 use actix_web::http::header::HeaderMap;
 use actix_web::http::{header, StatusCode};
-use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
+use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Context;
 use base64::Engine;
 use secrecy::Secret;
 use sqlx::PgPool;
 use tokio::task::JoinHandle;
 
+use crate::authentication::{Credentials, UserId};
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::error_handling::error_chain_fmt;
+use crate::routes::get_username;
 
 #[derive(serde::Deserialize)]
 pub struct BodyData {
@@ -70,18 +70,13 @@ pub async fn publish_newsletter(
     body: web::Json<BodyData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
-    request: HttpRequest,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, PublishError> {
-    let credentials = basic_authentication(request.headers()).map_err(PublishError::AuthError)?;
-    tracing::Span::current().record("username", &tracing::field::display(&credentials.username));
-    let user_id = authentication::validate_credentials(credentials, &pool)
+    let user_id = *user_id.into_inner();
+    let username = get_username(user_id, &pool)
         .await
-        // Passing the whole error into the PublishError constructors so that the context of the top-level
-        // wrapper is preserved when the error is logged
-        .map_err(|e| match e {
-            AuthError::InvalidCredentials(_) => PublishError::AuthError(e.into()),
-            AuthError::UnexpectedError(_) => PublishError::UnexpectedError(e.into()),
-        })?;
+        .map_err(PublishError::AuthError)?;
+    tracing::Span::current().record("username", &tracing::field::display(username));
     tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
 
     let confirmed_subscribers = get_confirmed_subscribers(&pool).await?;

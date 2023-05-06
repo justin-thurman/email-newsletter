@@ -139,6 +139,15 @@ impl TestApp {
             .expect("Failed to execute request")
     }
 
+    /// Logs in with default credentials
+    pub async fn default_login(&self) -> reqwest::Response {
+        let login_body = serde_json::json!({
+            "username": self.test_user.username,
+            "password": self.test_user.password,
+        });
+        self.post_login(&login_body).await
+    }
+
     /// Gets the admin dashboard endpoint
     pub async fn get_admin_dashboard(&self) -> reqwest::Response {
         self.api_client
@@ -167,7 +176,7 @@ impl TestApp {
     /// Posts the provided body to the newsletters endpoint
     pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
         self.api_client
-            .post(&format!("{}/newsletters", self.address))
+            .post(&format!("{}/admin/newsletters", self.address))
             .json(&body)
             .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .send()

@@ -1,8 +1,7 @@
-use actix_session::storage::RedisSessionStore;
-use actix_session::SessionMiddleware;
 use std::net::TcpListener;
 
-use crate::authentication::reject_anonymous_users;
+use actix_session::storage::RedisSessionStore;
+use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::dev::Server;
 use actix_web::web::Data;
@@ -15,6 +14,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing_actix_web::TracingLogger;
 
+use crate::authentication::reject_anonymous_users;
 use crate::configuration::{DatabaseSettings, Settings};
 use crate::email_client::EmailClient;
 use crate::routes::{
@@ -114,7 +114,6 @@ async fn run(
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
-            .route("/newsletters", web::post().to(publish_newsletter))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
             .route("/", web::get().to(home))
@@ -124,7 +123,8 @@ async fn run(
                     .route("/dashboard", web::get().to(admin_dashboard))
                     .route("/password", web::get().to(change_password_form))
                     .route("/password", web::post().to(change_password))
-                    .route("/logout", web::post().to(log_out)),
+                    .route("/logout", web::post().to(log_out))
+                    .route("/newsletters", web::post().to(publish_newsletter)),
             )
             .app_data(connection_pool.clone())
             .app_data(email_client.clone())

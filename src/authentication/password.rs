@@ -4,8 +4,8 @@ use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVe
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 
-use crate::routes;
-use crate::routes::spawn_blocking_with_tracing;
+use crate::async_helpers;
+use crate::async_helpers::spawn_blocking_with_tracing;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AuthError {
@@ -42,11 +42,11 @@ pub async fn validate_credentials(
     // `verify_password` can take 5-10 ms to complete; in order to avoid blocking the async scheduler,
     // we're moving the work to a blocking thread. Remember the rule of thumb: async functions should
     // never go too long without reaching an await.
-    routes::spawn_blocking_with_tracing(move || {
+    async_helpers::spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
-        .await
-        .context("Failed to spawn blocking task.")??;
+    .await
+    .context("Failed to spawn blocking task.")??;
 
     // if user_id is still None at this point, then we never found a valid user from `get_stored_credentials`
     user_id
@@ -55,8 +55,8 @@ pub async fn validate_credentials(
 }
 
 #[tracing::instrument(
-name = "Verify password hash",
-skip(expected_password_hash, password_candidate)
+    name = "Verify password hash",
+    skip(expected_password_hash, password_candidate)
 )]
 fn verify_password_hash(
     expected_password_hash: Secret<String>,
@@ -93,10 +93,10 @@ async fn get_stored_credentials(
         "#,
         username,
     )
-        .fetch_optional(pool)
-        .await
-        .context("Failed to perform a query to retrieve stored credentials")?
-        .map(|row| (row.user_id, Secret::new(row.password_hash)));
+    .fetch_optional(pool)
+    .await
+    .context("Failed to perform a query to retrieve stored credentials")?
+    .map(|row| (row.user_id, Secret::new(row.password_hash)));
     Ok(row)
 }
 
@@ -119,9 +119,9 @@ pub async fn change_password(
         password_hash.expose_secret(),
         user_id,
     )
-        .execute(pool)
-        .await
-        .context("Failed to change user's password in the database.")?;
+    .execute(pool)
+    .await
+    .context("Failed to change user's password in the database.")?;
     Ok(())
 }
 
@@ -133,7 +133,7 @@ fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, any
         Version::V0x13,
         Params::new(15000, 2, 1, None).unwrap(),
     )
-        .hash_password(password.expose_secret().as_bytes(), &salt)?
-        .to_string();
+    .hash_password(password.expose_secret().as_bytes(), &salt)?
+    .to_string();
     Ok(Secret::new(password_hash))
 }

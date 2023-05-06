@@ -1,20 +1,15 @@
 use std::fmt::{Debug, Formatter};
 
-use actix_web::body::BoxBody;
-use actix_web::http::header::HeaderMap;
-use actix_web::http::{header, StatusCode};
-use actix_web::{web, HttpResponse, ResponseError};
-use anyhow::Context;
-use base64::Engine;
-use secrecy::Secret;
-use sqlx::PgPool;
-use tokio::task::JoinHandle;
-
-use crate::authentication::{Credentials, UserId};
+use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::error_handling::error_chain_fmt;
 use crate::routes::get_username;
+use actix_web::body::BoxBody;
+use actix_web::http::{header, StatusCode};
+use actix_web::{web, HttpResponse, ResponseError};
+use anyhow::Context;
+use sqlx::PgPool;
 
 #[derive(serde::Deserialize)]
 pub struct BodyData {
@@ -62,9 +57,9 @@ impl ResponseError for PublishError {
 }
 
 #[tracing::instrument(
-    name = "Publish a newsletter issue",
-    skip(body, pool, email_client, request),
-    fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
+name = "Publish a newsletter issue",
+skip(body, pool, email_client, user_id),
+fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
 )]
 pub async fn publish_newsletter(
     body: web::Json<BodyData>,
@@ -137,50 +132,4 @@ async fn get_confirmed_subscribers(
         })
         .collect();
     Ok(confirmed_subscribers)
-}
-
-/// Extracts Credentials from basic authentication headers
-fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Error> {
-    // the header value, if present, must be a valid UTF8 string
-    let header_values = headers
-        .get("Authorization")
-        .context("The 'Authorization' header was missing")?
-        .to_str()
-        .context("The 'Authorization' header was not a valid UTF8 string.")?;
-    let base64encoded_segment = header_values
-        .strip_prefix("Basic ")
-        .context("The authorization scheme was not 'Basic'.")?;
-    let decoded_bytes = base64::engine::general_purpose::STANDARD
-        .decode(base64encoded_segment)
-        .context("Failed to base64-decode 'Basic' credentials.")?;
-    let decoded_credentials = String::from_utf8(decoded_bytes)
-        .context("The decoded credential string is not valid UTF8.")?;
-
-    // split into two segments using ':' as delimiter
-    let mut credentials = decoded_credentials.splitn(2, ':');
-    let username = credentials
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("A username must be provided in 'Basic' auth."))?
-        .to_string();
-    let password = credentials
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("A password must be provided in 'Basic' auth."))?
-        .to_string();
-
-    Ok(Credentials {
-        username,
-        password: Secret::new(password),
-    })
-}
-
-/// A helper function to spawn a blocking thread with tokio and pass in the current span so that the
-/// blocking thread has access to the current span as its parent.
-pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>
-where
-    // Trait bounds and signature copied from `spawn_blocking`
-    F: FnOnce() -> R + Send + 'static,
-    R: Send + 'static,
-{
-    let current_span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || current_span.in_scope(f))
 }

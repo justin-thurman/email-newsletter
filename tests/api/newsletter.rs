@@ -18,15 +18,16 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     // act
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
-        "content": {
-            "text": "Plaintext newsletter",
-            "html": "<p>HTML newsletter</p>"
-        }
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
     });
     let response = app.post_newsletter(newsletter_request_body).await;
 
     // assert
-    assert_eq!(response.status().as_u16(), 200);
+    assert_is_redirect_to(&response, "/admin/newsletters");
+
+    let html_page = app.get_newsletter_html().await;
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
 }
 
 #[tokio::test]
@@ -45,15 +46,16 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     // act
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
-        "content": {
-            "text": "Plaintext newsletter",
-            "html": "<p>HTML newsletter</p>"
-        }
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
     });
     let response = app.post_newsletter(newsletter_request_body).await;
 
     // assert
-    assert_eq!(response.status().as_u16(), 200);
+    assert_is_redirect_to(&response, "/admin/newsletters");
+
+    let html_page = app.get_newsletter_html().await;
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
 }
 
 #[tokio::test]
@@ -64,10 +66,8 @@ async fn newsletters_returns_400_for_invalid_data() {
     let test_cases = vec![
         (
             serde_json::json!({
-                "content": {
-                    "text": "Valid",
-                    "html": "<p>Valid</p>",
-                }
+            "text_content": "Newsletter body as plain text",
+            "html_content": "<p>Newsletter body as HTML</p>",
             }),
             "missing title",
         ),
@@ -89,26 +89,29 @@ async fn newsletters_returns_400_for_invalid_data() {
 }
 
 #[tokio::test]
-async fn newsletters_endpoint_requires_authentication() {
+async fn must_be_logged_in_to_post_newsletter() {
     // arrange
     let app = spawn_app().await;
-    create_confirmed_subscriber(&app).await;
-
-    Mock::given(any())
-        .respond_with(ResponseTemplate::new(200))
-        .expect(0)
-        .mount(&app.email_server)
-        .await;
 
     // act
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
-        "content": {
-            "text": "Plaintext newsletter",
-            "html": "<p>HTML newsletter</p>"
-        }
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
     });
     let response = app.post_newsletter(newsletter_request_body).await;
+
+    // assert
+    assert_is_redirect_to(&response, "/login");
+}
+
+#[tokio::test]
+async fn must_be_logged_in_to_get_newsletter() {
+    // arrange
+    let app = spawn_app().await;
+
+    // act
+    let response = app.get_newsletter().await;
 
     // assert
     assert_is_redirect_to(&response, "/login");

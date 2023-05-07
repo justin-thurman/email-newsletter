@@ -177,10 +177,24 @@ impl TestApp {
     pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/admin/newsletters", self.address))
-            .json(&body)
+            .form(&body)
             .send()
             .await
             .expect("Failed to execute request")
+    }
+    
+    /// Get newsletter endpoint
+    pub async fn get_newsletter(&self) -> reqwest::Response {
+        self.api_client
+            .get(&format!("{}/admin/newsletters", self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+    
+    /// Get newsletter html content
+    pub async fn get_newsletter_html(&self) -> String {
+        self.get_newsletter().await.text().await.unwrap()
     }
 
     /// Extracts confirmation links from mocked email API requests

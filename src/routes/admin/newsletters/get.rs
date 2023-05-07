@@ -1,9 +1,3 @@
-/*
-TODO:
-    3. Add "Send a newsletter" link to admin dashboard that links here
-    4. Use the Form extractor rather than JSON extractor to handle newsletter post request body
- */
-
 use actix_web::http::header::ContentType;
 use actix_web::HttpResponse;
 use actix_web_flash_messages::IncomingFlashMessages;

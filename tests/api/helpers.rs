@@ -182,7 +182,7 @@ impl TestApp {
             .await
             .expect("Failed to execute request")
     }
-    
+
     /// Get newsletter endpoint
     pub async fn get_newsletter(&self) -> reqwest::Response {
         self.api_client
@@ -191,7 +191,7 @@ impl TestApp {
             .await
             .expect("Failed to execute request")
     }
-    
+
     /// Get newsletter html content
     pub async fn get_newsletter_html(&self) -> String {
         self.get_newsletter().await.text().await.unwrap()

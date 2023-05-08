@@ -1,6 +1,7 @@
 application:
   host: 127.0.0.1
   base_url: "http://127.0.0.1"
+  hmac_secret: "local-dev-secret-key-must-be-64-bytes-in-length-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 database:
   require_ssl: false
 email_client:

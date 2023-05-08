@@ -1,23 +1,23 @@
 use std::fmt::{Debug, Formatter};
 
-use actix_web::{web, HttpResponse, ResponseError};
-use anyhow::Context;
-use sqlx::PgPool;
-
+use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::error_handling::error_chain_fmt;
+use crate::routes::get_username;
+use crate::routing_helpers::see_other;
+use actix_web::body::BoxBody;
+use actix_web::http::{header, StatusCode};
+use actix_web::{web, HttpResponse, ResponseError};
+use actix_web_flash_messages::FlashMessage;
+use anyhow::Context;
+use sqlx::PgPool;
 
 #[derive(serde::Deserialize)]
-pub struct BodyData {
+pub struct FormData {
     title: String,
-    content: Content,
-}
-
-#[derive(serde::Deserialize)]
-pub struct Content {
-    html: String,
-    text: String,
+    text_content: String,
+    html_content: String,
 }
 
 struct ConfirmedSubscriber {
@@ -26,6 +26,8 @@ struct ConfirmedSubscriber {
 
 #[derive(thiserror::Error)]
 pub enum PublishError {
+    #[error("Authentication failed")]
+    AuthError(#[source] anyhow::Error),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -36,13 +38,39 @@ impl Debug for PublishError {
     }
 }
 
-impl ResponseError for PublishError {}
+impl ResponseError for PublishError {
+    fn error_response(&self) -> HttpResponse<BoxBody> {
+        // by default, `error_response` invokes `status_code`, but since we have a bespoke `error_response`
+        // implementation, we don't need `status_code`
+        match self {
+            PublishError::UnexpectedError(_) => {
+                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            PublishError::AuthError(_) => HttpResponse::build(StatusCode::UNAUTHORIZED)
+                .append_header((header::WWW_AUTHENTICATE, r#"Basic realm="publish""#))
+                .finish(),
+        }
+    }
+}
 
+#[tracing::instrument(
+name = "Publish a newsletter issue",
+skip(form, pool, email_client, user_id),
+fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
+)]
 pub async fn publish_newsletter(
-    body: web::Json<BodyData>,
+    form: web::Form<FormData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, PublishError> {
+    let user_id = *user_id.into_inner();
+    let username = get_username(user_id, &pool)
+        .await
+        .map_err(PublishError::AuthError)?;
+    tracing::Span::current().record("username", &tracing::field::display(username));
+    tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
+
     let confirmed_subscribers = get_confirmed_subscribers(&pool).await?;
     for subscriber in confirmed_subscribers {
         match subscriber {
@@ -50,9 +78,9 @@ pub async fn publish_newsletter(
                 email_client
                     .send_email(
                         &subscriber.email,
-                        &body.title,
-                        &body.content.html,
-                        &body.content.text,
+                        &form.title,
+                        &form.html_content,
+                        &form.text_content,
                         // `with_context` is lazy, unlike `context`; used when the message has a runtime cost, as here
                         // where format allocates on the heap; note that must bring `anyhow::Context` trait into scope to use
                     )
@@ -70,7 +98,8 @@ pub async fn publish_newsletter(
             }
         }
     }
-    Ok(HttpResponse::Ok().finish())
+    FlashMessage::info("The newsletter issue has been published!").send();
+    Ok(see_other("/admin/newsletters"))
 }
 
 /// Gets all confirmed subscribers

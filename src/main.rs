@@ -3,7 +3,7 @@ use email_newsletter::startup::Application;
 use email_newsletter::telemetry;
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> anyhow::Result<()> {
     let subscriber = telemetry::get_tracing_subscriber("email-newsletter", "info", std::io::stdout);
     telemetry::init_subscriber(subscriber);
 

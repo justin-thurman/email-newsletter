@@ -4,8 +4,9 @@ use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::error_handling::error_chain_fmt;
+use crate::idempotency::IdempotencyKey;
 use crate::routes::get_username;
-use crate::routing_helpers::see_other;
+use crate::routing_helpers::{e400, e500, see_other};
 use actix_web::body::BoxBody;
 use actix_web::http::{header, StatusCode};
 use actix_web::{web, HttpResponse, ResponseError};
@@ -18,6 +19,7 @@ pub struct FormData {
     title: String,
     text_content: String,
     html_content: String,
+    idempotency_key: String,
 }
 
 struct ConfirmedSubscriber {
@@ -63,7 +65,7 @@ pub async fn publish_newsletter(
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
-) -> Result<HttpResponse, PublishError> {
+) -> Result<HttpResponse, actix_web::Error> {
     let user_id = *user_id.into_inner();
     let username = get_username(user_id, &pool)
         .await
@@ -71,23 +73,32 @@ pub async fn publish_newsletter(
     tracing::Span::current().record("username", &tracing::field::display(username));
     tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
 
-    let confirmed_subscribers = get_confirmed_subscribers(&pool).await?;
+    let FormData {
+        title,
+        text_content,
+        html_content,
+        idempotency_key,
+    } = form.0;
+    let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(e400)?;
+
+    let confirmed_subscribers = get_confirmed_subscribers(&pool).await.map_err(e500)?;
     for subscriber in confirmed_subscribers {
         match subscriber {
             Ok(subscriber) => {
                 email_client
                     .send_email(
                         &subscriber.email,
-                        &form.title,
-                        &form.html_content,
-                        &form.text_content,
+                        &title,
+                        &html_content,
+                        &text_content,
                         // `with_context` is lazy, unlike `context`; used when the message has a runtime cost, as here
                         // where format allocates on the heap; note that must bring `anyhow::Context` trait into scope to use
                     )
                     .await
                     .with_context(|| {
                         format!("Failed to send newsletter issue to {}", subscriber.email)
-                    })?;
+                    })
+                    .map_err(e500)?;
             }
             Err(error) => {
                 tracing::warn!(

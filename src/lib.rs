@@ -4,6 +4,7 @@ pub mod configuration;
 pub mod domain;
 pub mod email_client;
 mod error_handling;
+pub mod idempotency;
 pub mod routes;
 mod routing_helpers;
 pub mod session_state;

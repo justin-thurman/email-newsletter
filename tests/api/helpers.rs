@@ -174,10 +174,10 @@ impl TestApp {
     }
 
     /// Posts the provided body to the newsletters endpoint
-    pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
+    pub async fn post_newsletter(&self, body: &serde_json::Value) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/admin/newsletters", self.address))
-            .form(&body)
+            .form(body)
             .send()
             .await
             .expect("Failed to execute request")

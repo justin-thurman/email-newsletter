@@ -20,8 +20,9 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         "title": "Newsletter title",
         "text_content": "Newsletter body as plain text",
         "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
     });
-    let response = app.post_newsletter(newsletter_request_body).await;
+    let response = app.post_newsletter(&newsletter_request_body).await;
 
     // assert
     assert_is_redirect_to(&response, "/admin/newsletters");
@@ -48,14 +49,53 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         "title": "Newsletter title",
         "text_content": "Newsletter body as plain text",
         "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
     });
-    let response = app.post_newsletter(newsletter_request_body).await;
+    let response = app.post_newsletter(&newsletter_request_body).await;
 
     // assert
     assert_is_redirect_to(&response, "/admin/newsletters");
 
     let html_page = app.get_newsletter_html().await;
     assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+}
+
+#[tokio::test]
+async fn newsletter_delivery_is_idempotent() {
+    // arrange
+    let app = spawn_app().await;
+    app.default_login().await;
+    create_confirmed_subscriber(&app).await;
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
+    // act 1: first newsletter delivery
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
+    });
+    let response = app.post_newsletter(&newsletter_request_body).await;
+
+    // assert
+    assert_is_redirect_to(&response, "/admin/newsletters");
+    let html_page = app.get_newsletter_html().await;
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
+    // act 2: second newsletter delivery
+    let response = app.post_newsletter(&newsletter_request_body).await;
+
+    // assert
+    assert_is_redirect_to(&response, "/admin/newsletters");
+    let html_page = app.get_newsletter_html().await;
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+    // Upon drop, mock asserts that only a single call to the email server was made
 }
 
 #[tokio::test]
@@ -68,6 +108,7 @@ async fn newsletters_returns_400_for_invalid_data() {
             serde_json::json!({
             "text_content": "Newsletter body as plain text",
             "html_content": "<p>Newsletter body as HTML</p>",
+            "idempotency_key": uuid::Uuid::new_v4().to_string(),
             }),
             "missing title",
         ),
@@ -76,7 +117,7 @@ async fn newsletters_returns_400_for_invalid_data() {
 
     for (invalid_body, error_message) in test_cases {
         // act
-        let response = app.post_newsletter(invalid_body).await;
+        let response = app.post_newsletter(&invalid_body).await;
 
         // assert
         assert_eq!(
@@ -98,8 +139,9 @@ async fn must_be_logged_in_to_post_newsletter() {
         "title": "Newsletter title",
         "text_content": "Newsletter body as plain text",
         "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
     });
-    let response = app.post_newsletter(newsletter_request_body).await;
+    let response = app.post_newsletter(&newsletter_request_body).await;
 
     // assert
     assert_is_redirect_to(&response, "/login");

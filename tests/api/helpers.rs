@@ -11,11 +11,15 @@ use email_newsletter::telemetry::{get_tracing_subscriber, init_subscriber};
 
 // ensure that the tracing stack is only initialized once
 static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
     if std::env::var("TEST_LOG").is_ok() {
-        let subscriber = get_tracing_subscriber("test", "debug", std::io::stdout);
+        let subscriber =
+            get_tracing_subscriber(subscriber_name, default_filter_level, std::io::stdout);
         init_subscriber(subscriber);
     } else {
-        let subscriber = get_tracing_subscriber("test", "debug", std::io::sink);
+        let subscriber =
+            get_tracing_subscriber(subscriber_name, default_filter_level, std::io::sink);
         init_subscriber(subscriber);
     }
 });

@@ -7,8 +7,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 pub fn get_tracing_subscriber<Sink>(
-    name: &str,
-    env_filter: &str,
+    name: String,
+    env_filter: String,
     sink: Sink,
 ) -> impl Subscriber + Send + Sync
 where
@@ -16,7 +16,7 @@ where
 {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter));
-    let formatting_layer = BunyanFormattingLayer::new(name.into(), sink);
+    let formatting_layer = BunyanFormattingLayer::new(name, sink);
     Registry::default()
         .with(env_filter)
         .with(JsonStorageLayer)

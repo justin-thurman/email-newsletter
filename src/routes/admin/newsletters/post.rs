@@ -72,6 +72,7 @@ pub async fn publish_newsletter(
         .map_err(PublishError::AuthError)?;
     tracing::Span::current().record("username", &tracing::field::display(username));
     tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
+    println!("Heyo");
 
     let FormData {
         title,

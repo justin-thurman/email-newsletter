@@ -104,6 +104,10 @@ pub enum NextAction {
     ReturnSavedResponse(HttpResponse),
 }
 
+/// Attempts to insert the user_id and idempotency_key that indicates we have started processing a newsletter
+/// delivery. This insert happens in a transaction. If the insert succeeds, return the transaction so the caller
+/// can use it to save the HttpResponse that should be returned for this idempotency key. If the insert fails,
+/// we assume the response has been saved, and we fetch it and return it.
 pub async fn try_processing(
     pool: &PgPool,
     idempotency_key: &IdempotencyKey,

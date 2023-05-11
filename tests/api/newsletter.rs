@@ -1,7 +1,9 @@
-use crate::helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp};
 use std::time::Duration;
-use wiremock::matchers::{any, method, path};
-use wiremock::{Mock, ResponseTemplate};
+
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockBuilder, ResponseTemplate};
+
+use crate::helpers::{assert_is_redirect_to, spawn_app, ConfirmationLinks, TestApp};
 
 #[tokio::test]
 async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
@@ -10,7 +12,7 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
     app.default_login().await;
     create_unconfirmed_subscriber(&app).await;
 
-    Mock::given(any())
+    when_sending_an_email()
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
         .mount(&app.email_server)
@@ -39,7 +41,7 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
     app.default_login().await;
     create_confirmed_subscriber(&app).await;
 
-    Mock::given(any())
+    when_sending_an_email()
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&app.email_server)
@@ -68,8 +70,7 @@ async fn newsletter_delivery_is_idempotent() {
     app.default_login().await;
     create_confirmed_subscriber(&app).await;
 
-    Mock::given(path("/email"))
-        .and(method("POST"))
+    when_sending_an_email()
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&app.email_server)
@@ -106,8 +107,7 @@ async fn concurrent_form_submission_is_handled_gracefully() {
     create_confirmed_subscriber(&app).await;
     app.default_login().await;
 
-    Mock::given(path("/email"))
-        .and(method("POST"))
+    when_sending_an_email()
         // setting a long delay to ensure that the second request arrives before first completes
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(2)))
         .expect(1)
@@ -194,6 +194,16 @@ async fn must_be_logged_in_to_get_newsletter() {
 
     // assert
     assert_is_redirect_to(&response, "/login");
+}
+
+#[tokio::test]
+async fn transient_errors_do_not_cause_duplicate_deliveries_on_retries() {
+    todo!()
+}
+
+/// Returns the mock builder used for mocking the email server
+fn when_sending_an_email() -> MockBuilder {
+    Mock::given(path("/email")).and(method("POST"))
 }
 
 /// Using the public API of app under test to create unconfirmed subscriber

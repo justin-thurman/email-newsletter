@@ -1,3 +1,6 @@
+use fake::faker::internet::en::SafeEmail;
+use fake::faker::name::en::Name;
+use fake::Fake;
 use std::time::Duration;
 
 use wiremock::matchers::{method, path};
@@ -198,7 +201,51 @@ async fn must_be_logged_in_to_get_newsletter() {
 
 #[tokio::test]
 async fn transient_errors_do_not_cause_duplicate_deliveries_on_retries() {
-    todo!()
+    // arrange
+    let app = spawn_app().await;
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
+    });
+    // creating two subscribers
+    create_confirmed_subscriber(&app).await;
+    create_confirmed_subscriber(&app).await;
+    app.default_login().await;
+
+    // setting email server mock so that the delivery to the first subscriber succeeds,
+    // but the delivery to the second subscriber fails
+    when_sending_an_email()
+        .respond_with(ResponseTemplate::new(200))
+        .up_to_n_times(1) // only the first request
+        .expect(1)
+        .named("Act 1: first request is 200")
+        .mount(&app.email_server)
+        .await;
+    when_sending_an_email()
+        .respond_with(ResponseTemplate::new(500))
+        .up_to_n_times(1)
+        .expect(1)
+        .named("Act 1: second request is 500")
+        .mount(&app.email_server)
+        .await;
+
+    // act 1: submit the newsletter delivery form
+    let response = app.post_newsletter(&newsletter_request_body).await;
+    assert_eq!(response.status().as_u16(), 500); // 500 because second delivery failed
+
+    // update email server to mock to response with 200s for all requests
+    when_sending_an_email()
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1) // still only expect 1 request, since the first subscriber delivery succeeded
+        .named("Act 2: email server responds with 200s")
+        .mount(&app.email_server)
+        .await;
+
+    // act 2: retry submitting the form
+    let response = app.post_newsletter(&newsletter_request_body).await;
+    assert_eq!(response.status().as_u16(), 303);
 }
 
 /// Returns the mock builder used for mocking the email server
@@ -208,7 +255,13 @@ fn when_sending_an_email() -> MockBuilder {
 
 /// Using the public API of app under test to create unconfirmed subscriber
 async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
-    let body = "name=test&email=test%40email.com";
+    let name: String = Name().fake();
+    let email: String = SafeEmail().fake();
+    let body = serde_urlencoded::to_string(serde_json::json!({
+        "name": name,
+        "email": email,
+    }))
+    .unwrap();
 
     // by using mount_as_scoped here, this mock is only active while the returned MockGuard is in scope
     // i.e., this mock stops working once we leave `create_unconfirmed_subscriber`;

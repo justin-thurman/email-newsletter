@@ -8,6 +8,9 @@ up:
 build:
     docker build --tag email-newsletter --file Dockerfile .
 
+test TEST:
+    TEST_LOG=1 cargo test --test api {{TEST}} | bunyan
+
 run:
     docker run -p 8000:8000 email-newsletter
 

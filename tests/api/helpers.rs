@@ -6,16 +6,22 @@ use uuid::Uuid;
 use wiremock::MockServer;
 
 use email_newsletter::configuration::{get_configuration, DatabaseSettings};
+use email_newsletter::email_client::EmailClient;
+use email_newsletter::issue_delivery_worker::{try_execute_task, ExecutionOutcome};
 use email_newsletter::startup::{get_connection_pool, Application};
 use email_newsletter::telemetry::{get_tracing_subscriber, init_subscriber};
 
 // ensure that the tracing stack is only initialized once
 static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
     if std::env::var("TEST_LOG").is_ok() {
-        let subscriber = get_tracing_subscriber("test", "debug", std::io::stdout);
+        let subscriber =
+            get_tracing_subscriber(subscriber_name, default_filter_level, std::io::stdout);
         init_subscriber(subscriber);
     } else {
-        let subscriber = get_tracing_subscriber("test", "debug", std::io::sink);
+        let subscriber =
+            get_tracing_subscriber(subscriber_name, default_filter_level, std::io::sink);
         init_subscriber(subscriber);
     }
 });
@@ -73,9 +79,22 @@ pub struct TestApp {
     pub port: u16,
     pub test_user: TestUser,
     pub api_client: reqwest::Client,
+    pub email_client: EmailClient,
 }
 
 impl TestApp {
+    pub async fn dispatch_all_pending_emails(&self) {
+        loop {
+            if let ExecutionOutcome::EmptyQueue =
+                try_execute_task(&self.connection_pool, &self.email_client)
+                    .await
+                    .unwrap()
+            {
+                break;
+            }
+        }
+    }
+
     /// Gets the logout endpoint
     pub async fn post_logout(&self) -> reqwest::Response {
         self.api_client
@@ -174,10 +193,10 @@ impl TestApp {
     }
 
     /// Posts the provided body to the newsletters endpoint
-    pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
+    pub async fn post_newsletter(&self, body: &serde_json::Value) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/admin/newsletters", self.address))
-            .form(&body)
+            .form(body)
             .send()
             .await
             .expect("Failed to execute request")
@@ -268,6 +287,7 @@ pub async fn spawn_app() -> TestApp {
         port,
         test_user: TestUser::generate(),
         api_client: client,
+        email_client: configuration.email_client.client(),
     };
     test_app.test_user.store(&test_app.connection_pool).await;
     test_app

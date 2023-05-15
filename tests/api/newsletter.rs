@@ -35,6 +35,8 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
 
     let html_page = app.get_newsletter_html().await;
     assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
+    app.dispatch_all_pending_emails().await;
 }
 
 #[tokio::test]
@@ -64,6 +66,8 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
 
     let html_page = app.get_newsletter_html().await;
     assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
+    app.dispatch_all_pending_emails().await;
 }
 
 #[tokio::test]
@@ -100,6 +104,8 @@ async fn newsletter_delivery_is_idempotent() {
     assert_is_redirect_to(&response, "/admin/newsletters");
     let html_page = app.get_newsletter_html().await;
     assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
+
+    app.dispatch_all_pending_emails().await;
     // Upon drop, mock asserts that only a single call to the email server was made
 }
 
@@ -135,6 +141,7 @@ async fn concurrent_form_submission_is_handled_gracefully() {
         second_response.text().await.unwrap()
     );
 
+    app.dispatch_all_pending_emails().await;
     // mock verifies on drop that we sent the newsletter once
 }
 
@@ -197,55 +204,6 @@ async fn must_be_logged_in_to_get_newsletter() {
 
     // assert
     assert_is_redirect_to(&response, "/login");
-}
-
-#[tokio::test]
-async fn transient_errors_do_not_cause_duplicate_deliveries_on_retries() {
-    // arrange
-    let app = spawn_app().await;
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "text_content": "Newsletter body as plain text",
-        "html_content": "<p>Newsletter body as HTML</p>",
-        "idempotency_key": uuid::Uuid::new_v4().to_string(),
-    });
-    // creating two subscribers
-    create_confirmed_subscriber(&app).await;
-    create_confirmed_subscriber(&app).await;
-    app.default_login().await;
-
-    // setting email server mock so that the delivery to the first subscriber succeeds,
-    // but the delivery to the second subscriber fails
-    when_sending_an_email()
-        .respond_with(ResponseTemplate::new(200))
-        .up_to_n_times(1) // only the first request
-        .expect(1)
-        .named("Act 1: first request is 200")
-        .mount(&app.email_server)
-        .await;
-    when_sending_an_email()
-        .respond_with(ResponseTemplate::new(500))
-        .up_to_n_times(1)
-        .expect(1)
-        .named("Act 1: second request is 500")
-        .mount(&app.email_server)
-        .await;
-
-    // act 1: submit the newsletter delivery form
-    let response = app.post_newsletter(&newsletter_request_body).await;
-    assert_eq!(response.status().as_u16(), 500); // 500 because second delivery failed
-
-    // update email server to mock to response with 200s for all requests
-    when_sending_an_email()
-        .respond_with(ResponseTemplate::new(200))
-        .expect(1) // still only expect 1 request, since the first subscriber delivery succeeded
-        .named("Act 2: email server responds with 200s")
-        .mount(&app.email_server)
-        .await;
-
-    // act 2: retry submitting the form
-    let response = app.post_newsletter(&newsletter_request_body).await;
-    assert_eq!(response.status().as_u16(), 303);
 }
 
 /// Returns the mock builder used for mocking the email server
